@@ -53,9 +53,9 @@ def task(ctx, config):
     runtype = config.get('type', 'write')
 
     create_pool = config.get('create_pool', True)
+    PREFIX = 'client.'
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, str)
-        PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
         (remote,) = ctx.cluster.only(role).remotes.keys()
@@ -84,10 +84,7 @@ def task(ctx, config):
 
         concurrency = config.get('concurrency', 16)
         osize = config.get('objectsize', 65536)
-        if osize == 0:
-            objectsize = []
-        else:
-            objectsize = ['--object-size', str(osize)]
+        objectsize = [] if osize == 0 else ['--object-size', str(osize)]
         size = ['-b', str(config.get('size', 65536))]
         # If doing a reading run then populate data
         if runtype != "write":
@@ -113,23 +110,23 @@ def task(ctx, config):
             objectsize = []
 
         proc = remote.run(
-            args=[
-                "/bin/sh", "-c",
-                " ".join(['adjust-ulimits',
-                          'ceph-coverage',
-                          '{tdir}/archive/coverage',
-                          'rados',
-			  '--no-log-to-stderr',
-                          '--name', role]
-                          + size + objectsize +
-                          ['-p' , pool,
-                          'bench', str(config.get('time', 360)), runtype,
-                          ] + write_to_omap + cleanup).format(tdir=testdir),
-                ],
-            logger=log.getChild('radosbench.{id}'.format(id=id_)),
-            stdin=run.PIPE,
-            wait=False
-            )
+        args=[
+            "/bin/sh", "-c",
+            " ".join(['adjust-ulimits',
+                      'ceph-coverage',
+                      '{tdir}/archive/coverage',
+                      'rados',
+        '--no-log-to-stderr',
+                      '--name', role]
+                      + size + objectsize +
+                      ['-p' , pool,
+                      'bench', str(config.get('time', 360)), runtype,
+                      ] + write_to_omap + cleanup).format(tdir=testdir),
+            ],
+        logger=log.getChild('radosbench.{id}'.format(id=id_)),
+        stdin=run.PIPE,
+        wait=False
+        )
         radosbench[id_] = proc
 
     try:

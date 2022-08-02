@@ -27,10 +27,8 @@ class IscsiSetup(object):
     def _kill_background(self, p):
         if p.stdin:
             p.stdin.close()
-            try:
+            with contextlib.suppress(CommandFailedError, ConnectionLostError):
                 p.wait()
-            except (CommandFailedError, ConnectionLostError):
-                pass
 
     def kill_backgrounds(self):
         for p in self.background_procs:

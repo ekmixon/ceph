@@ -41,9 +41,9 @@ def clients_evicted(ctx, config):
     clients = config.get('clients')
 
     if clients is None:
-        clients = {("client."+client_id): True for client_id in ctx.mounts}
+        clients = {f"client.{client_id}": True for client_id in ctx.mounts}
 
-    log.info("clients is {}".format(str(clients)))
+    log.info(f"clients is {str(clients)}")
 
     fs = Filesystem(ctx)
     status = fs.status()
@@ -63,10 +63,9 @@ def clients_evicted(ctx, config):
                     global_id = mount.get_global_id()
                     if session['id'] == global_id:
                         if evicted:
-                            raise RuntimeError("client still has session: {}".format(str(session)))
-                        else:
-                            log.info("client {} has a session with MDS {}.{}".format(client, fs.id, rank['rank']))
-                            has_session.add(client)
+                            raise RuntimeError(f"client still has session: {str(session)}")
+                        log.info(f"client {client} has a session with MDS {fs.id}.{rank['rank']}")
+                        has_session.add(client)
 
     no_session = set(clients) - has_session
     should_assert = False
@@ -74,10 +73,13 @@ def clients_evicted(ctx, config):
         mount = mounts.get(client)
         if mount is not None:
             if evicted:
-                log.info("confirming client {} is blocklisted".format(client))
+                log.info(f"confirming client {client} is blocklisted")
                 assert fs.is_addr_blocklisted(mount.get_global_addr())
             elif client in no_session:
-                log.info("client {} should not be evicted but has no session with an MDS".format(client))
+                log.info(
+                    f"client {client} should not be evicted but has no session with an MDS"
+                )
+
                 fs.is_addr_blocklisted(mount.get_global_addr()) # for debugging
                 should_assert = True
     if should_assert:

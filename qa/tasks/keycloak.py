@@ -20,7 +20,7 @@ def get_keycloak_version(config):
 
 def get_keycloak_dir(ctx, config):
     keycloak_version = get_keycloak_version(config)
-    current_version = 'keycloak-'+keycloak_version
+    current_version = f'keycloak-{keycloak_version}'
     return '{tdir}/{ver}'.format(tdir=teuthology.get_testdir(ctx),ver=current_version)
 
 def run_in_keycloak_dir(ctx, client, config, args, **kwargs):
@@ -33,7 +33,7 @@ def get_toxvenv_dir(ctx):
     return ctx.tox.venv_path
 
 def toxvenv_sh(ctx, remote, args, **kwargs):
-    activate = get_toxvenv_dir(ctx) + '/bin/activate'
+    activate = f'{get_toxvenv_dir(ctx)}/bin/activate'
     return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
 
 @contextlib.contextmanager
@@ -50,16 +50,18 @@ def install_packages(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         test_dir=teuthology.get_testdir(ctx)
         current_version = get_keycloak_version(config)
-        link1 = 'https://downloads.jboss.org/keycloak/'+current_version+'/keycloak-'+current_version+'.tar.gz'
+        link1 = f'https://downloads.jboss.org/keycloak/{current_version}/keycloak-{current_version}.tar.gz'
+
         toxvenv_sh(ctx, remote, ['wget', link1])
-        
-        file1 = 'keycloak-'+current_version+'.tar.gz'
+
+        file1 = f'keycloak-{current_version}.tar.gz'
         toxvenv_sh(ctx, remote, ['tar', '-C', test_dir, '-xvzf', file1])
 
-        link2 ='https://downloads.jboss.org/keycloak/'+current_version+'/adapters/keycloak-oidc/keycloak-wildfly-adapter-dist-'+current_version+'.tar.gz' 
+        link2 = f'https://downloads.jboss.org/keycloak/{current_version}/adapters/keycloak-oidc/keycloak-wildfly-adapter-dist-{current_version}.tar.gz'
+
         toxvenv_sh(ctx, remote, ['cd', '{tdir}'.format(tdir=get_keycloak_dir(ctx,config)), run.Raw('&&'), 'wget', link2])
-        
-        file2 = 'keycloak-wildfly-adapter-dist-'+current_version+'.tar.gz'
+
+        file2 = f'keycloak-wildfly-adapter-dist-{current_version}.tar.gz'
         toxvenv_sh(ctx, remote, ['tar', '-C', '{tdir}'.format(tdir=get_keycloak_dir(ctx,config)), '-xvzf', '{tdr}/{file}'.format(tdr=get_keycloak_dir(ctx,config),file=file2)])
 
     try:
@@ -69,8 +71,16 @@ def install_packages(ctx, config):
         for client in config:
             current_version = get_keycloak_version(config)
             ctx.cluster.only(client).run(
-                args=['cd', '{tdir}'.format(tdir=get_keycloak_dir(ctx,config)), run.Raw('&&'), 'rm', '-rf', 'keycloak-wildfly-adapter-dist-' + current_version + '.tar.gz'],
+                args=[
+                    'cd',
+                    '{tdir}'.format(tdir=get_keycloak_dir(ctx, config)),
+                    run.Raw('&&'),
+                    'rm',
+                    '-rf',
+                    f'keycloak-wildfly-adapter-dist-{current_version}.tar.gz',
+                ]
             )
+
 
             ctx.cluster.only(client).run(
                 args=['rm', '-rf', '{tdir}'.format(tdir=get_keycloak_dir(ctx,config))],
@@ -128,6 +138,14 @@ def run_admin_cmds(ctx,config):
     """
     assert isinstance(config, dict)
     log.info('Running admin commands...')
+    realm_name='demorealm'
+    client_name='my_client'
+    start_value= "-----BEGIN CERTIFICATE-----\n"
+    end_value= "\n-----END CERTIFICATE-----"
+    realm = f'realm={realm_name}'
+
+    clientid = f'client_id={client_name}'
+
     for (client,_) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
@@ -143,9 +161,6 @@ def run_admin_cmds(ctx,config):
                 ],
             )
 
-        realm_name='demorealm'
-        realm='realm={}'.format(realm_name)
-
         remote.run(
            args=[
                 '{tdir}/bin/kcadm.sh'.format(tdir=get_keycloak_dir(ctx,config)),
@@ -157,8 +172,7 @@ def run_admin_cmds(ctx,config):
             ],
         )
 
-        client_name='my_client'
-        client='clientId={}'.format(client_name)
+        client = f'clientId={client_name}'
 
         remote.run(
            args=[
@@ -180,7 +194,7 @@ def run_admin_cmds(ctx,config):
                  ])
 
         pre0=ans1.rstrip()
-        pre1="clients/{}".format(pre0)
+        pre1 = f"clients/{pre0}"
 
         remote.run(
             args=[
@@ -193,7 +207,7 @@ def run_admin_cmds(ctx,config):
             ],
         )
 
-        ans2= pre1+'/client-secret'
+        ans2 = f'{pre1}/client-secret'
 
         out2= toxvenv_sh(ctx, remote, 
                  [
@@ -204,41 +218,62 @@ def run_admin_cmds(ctx,config):
                  ])
 
         ans0= '{client}:{secret}'.format(client=client_name,secret=out2[15:51])
-        ans3= 'client_secret={}'.format(out2[15:51])
-        clientid='client_id={}'.format(client_name)
+        ans3 = f'client_secret={out2[15:51]}'
+        out3 = toxvenv_sh(
+            ctx,
+            remote,
+            [
+                'curl',
+                '-k',
+                '-v',
+                '-X',
+                'POST',
+                '-H',
+                'Content-Type:application/x-www-form-urlencoded',
+                '-d',
+                'scope=openid',
+                '-d',
+                'grant_type=client_credentials',
+                '-d',
+                clientid,
+                '-d',
+                ans3,
+                f'http://localhost:8080/auth/realms/{realm_name}/protocol/openid-connect/token',
+                run.Raw('|'),
+                'jq',
+                '-r',
+                '.access_token',
+            ],
+        )
 
-        out3= toxvenv_sh(ctx, remote, 
-                 [
-                  'curl', '-k', '-v', 
-                  '-X', 'POST', 
-                  '-H', 'Content-Type:application/x-www-form-urlencoded', 
-                  '-d', 'scope=openid', 
-                  '-d', 'grant_type=client_credentials', 
-                  '-d', clientid, 
-                  '-d', ans3, 
-                  'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token', run.Raw('|'), 
-                  'jq', '-r', '.access_token'
-                 ])
 
         pre2=out3.rstrip()
-        acc_token= 'token={}'.format(pre2)
-        ans4= '{}'.format(pre2)
+        acc_token = f'token={pre2}'
+        ans4 = f'{pre2}'
 
-        out4= toxvenv_sh(ctx, remote, 
-                 [
-                  'curl', '-k', '-v', 
-                  '-X', 'GET', 
-                  '-H', 'Content-Type:application/x-www-form-urlencoded', 
-                  'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/certs', run.Raw('|'), 
-                  'jq', '-r', '.keys[].x5c[]'
-                 ])
+        out4 = toxvenv_sh(
+            ctx,
+            remote,
+            [
+                'curl',
+                '-k',
+                '-v',
+                '-X',
+                'GET',
+                '-H',
+                'Content-Type:application/x-www-form-urlencoded',
+                f'http://localhost:8080/auth/realms/{realm_name}/protocol/openid-connect/certs',
+                run.Raw('|'),
+                'jq',
+                '-r',
+                '.keys[].x5c[]',
+            ],
+        )
+
 
         pre3=out4.rstrip()
-        cert_value='{}'.format(pre3)
-        start_value= "-----BEGIN CERTIFICATE-----\n"
-        end_value= "\n-----END CERTIFICATE-----"
-        user_data=""
-        user_data+=start_value
+        cert_value = f'{pre3}'
+        user_data = "" + start_value
         user_data+=cert_value
         user_data+=end_value
 
@@ -254,22 +289,30 @@ def run_admin_cmds(ctx,config):
                   '--fingerprint', '--noout', '-sha1'
                  ])
 
-        pre_ans= '{}'.format(out5[17:76])
-        ans5=""
+        pre_ans = f'{out5[17:76]}'
+        ans5 = "".join(character for character in pre_ans if (character!=':'))
 
-        for character in pre_ans:
-            if(character!=':'):
-                ans5+=character
+        out6 = toxvenv_sh(
+            ctx,
+            remote,
+            [
+                'curl',
+                '-k',
+                '-v',
+                '-X',
+                'POST',
+                '-u',
+                ans0,
+                '-d',
+                acc_token,
+                f'http://localhost:8080/auth/realms/{realm_name}/protocol/openid-connect/token/introspect',
+                run.Raw('|'),
+                'jq',
+                '-r',
+                '.aud',
+            ],
+        )
 
-        out6= toxvenv_sh(ctx, remote, 
-                 [
-                  'curl', '-k', '-v', 
-                  '-X', 'POST', 
-                  '-u', ans0, 
-                  '-d', acc_token, 
-                  'http://localhost:8080/auth/realms/'+realm_name+'/protocol/openid-connect/token/introspect', run.Raw('|'), 
-                  'jq', '-r', '.aud'
-                 ])
 
         ans6=out6.rstrip()
 
