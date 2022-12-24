@@ -13,3 +13,4 @@ Sphinx-Substitution-Extensions
 typed-ast
 sphinxcontrib-openapi
 sphinxcontrib-seqdiag
+setuptools>=65.5.1 # not directly required, pinned by Snyk to avoid a vulnerability
