@@ -8,3 +8,4 @@ rstcheck==3.3.1
 autopep8
 pyfakefs
 isort==5.5.3
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
